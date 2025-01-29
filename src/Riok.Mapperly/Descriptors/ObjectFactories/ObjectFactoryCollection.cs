@@ -3,28 +3,21 @@ using Microsoft.CodeAnalysis;
 
 namespace Riok.Mapperly.Descriptors.ObjectFactories;
 
-public class ObjectFactoryCollection
+public class ObjectFactoryCollection(IReadOnlyCollection<ObjectFactory> objectFactories)
 {
-    public static readonly ObjectFactoryCollection Empty = new(Array.Empty<ObjectFactory>());
-
-    private readonly IReadOnlyCollection<ObjectFactory> _objectFactories;
-    private readonly Dictionary<ITypeSymbol, ObjectFactory> _concreteObjectFactories = new(SymbolEqualityComparer.IncludeNullability);
-
-    public ObjectFactoryCollection(IReadOnlyCollection<ObjectFactory> objectFactories)
-    {
-        _objectFactories = objectFactories;
-    }
+    private readonly Dictionary<TypeMappingKey, ObjectFactory> _concreteObjectFactories = new();
 
     public bool TryFindObjectFactory(ITypeSymbol sourceType, ITypeSymbol targetType, [NotNullWhen(true)] out ObjectFactory? objectFactory)
     {
-        if (_concreteObjectFactories.TryGetValue(targetType, out objectFactory))
+        var key = new TypeMappingKey(sourceType, targetType);
+        if (_concreteObjectFactories.TryGetValue(key, out objectFactory))
             return true;
 
-        objectFactory = _objectFactories.FirstOrDefault(f => f.CanCreateType(sourceType, targetType));
+        objectFactory = objectFactories.FirstOrDefault(f => f.CanCreateInstanceOfType(sourceType, targetType));
         if (objectFactory == null)
             return false;
 
-        _concreteObjectFactories[targetType] = objectFactory;
+        _concreteObjectFactories[key] = objectFactory;
         return true;
     }
 }

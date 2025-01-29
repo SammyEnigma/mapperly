@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Riok.Mapperly.Abstractions;
 using Riok.Mapperly.Diagnostics;
 using Riok.Mapperly.Helpers;
 
@@ -6,25 +7,29 @@ namespace Riok.Mapperly.Descriptors.ObjectFactories;
 
 public static class ObjectFactoryBuilder
 {
-    public static ObjectFactoryCollection ExtractObjectFactories(SimpleMappingBuilderContext ctx, ITypeSymbol mapperSymbol)
+    public static ObjectFactoryCollection ExtractObjectFactories(SimpleMappingBuilderContext ctx, ITypeSymbol mapperSymbol, bool isStatic)
     {
-        var objectFactories = mapperSymbol.GetMembers()
+        var objectFactories = mapperSymbol
+            .GetMembers()
             .OfType<IMethodSymbol>()
-            .Where(m => m.HasAttribute(ctx.Types.ObjectFactoryAttribute))
-            .Select(x => BuildObjectFactory(ctx, x))
+            .Where(m => ctx.SymbolAccessor.HasAttribute<ObjectFactoryAttribute>(m))
+            .Select(x => BuildObjectFactory(ctx, x, isStatic))
             .WhereNotNull()
             .ToList();
 
         return new ObjectFactoryCollection(objectFactories);
     }
 
-    private static ObjectFactory? BuildObjectFactory(SimpleMappingBuilderContext ctx, IMethodSymbol methodSymbol)
+    private static ObjectFactory? BuildObjectFactory(SimpleMappingBuilderContext ctx, IMethodSymbol methodSymbol, bool isStatic)
     {
-        if (methodSymbol.IsAsync
+        if (
+            methodSymbol.IsAsync
             || methodSymbol.Parameters.Length > 1
             || methodSymbol.IsPartialDefinition
             || methodSymbol.MethodKind != MethodKind.Ordinary
-            || methodSymbol.ReturnsVoid)
+            || methodSymbol.ReturnsVoid
+            || (!methodSymbol.IsStatic && isStatic)
+        )
         {
             ctx.ReportDiagnostic(DiagnosticDescriptors.InvalidObjectFactorySignature, methodSymbol, methodSymbol.Name);
             return null;
@@ -33,8 +38,8 @@ public static class ObjectFactoryBuilder
         if (!methodSymbol.IsGenericMethod)
         {
             return methodSymbol.Parameters.Length == 1
-                ? new SimpleObjectFactoryWithSource(methodSymbol)
-                : new SimpleObjectFactory(methodSymbol);
+                ? new SimpleObjectFactoryWithSource(ctx.SymbolAccessor, methodSymbol)
+                : new SimpleObjectFactory(ctx.SymbolAccessor, methodSymbol);
         }
 
         switch (methodSymbol.TypeParameters.Length)
@@ -50,13 +55,18 @@ public static class ObjectFactoryBuilder
                 return null;
         }
     }
+
     private static ObjectFactory? BuildGenericSingleTypeParameterObjectFactory(SimpleMappingBuilderContext ctx, IMethodSymbol methodSymbol)
     {
         var sourceParameter = methodSymbol.Parameters.FirstOrDefault();
         var typeParameter = methodSymbol.TypeParameters[0];
-        var returnTypeIsGeneric = methodSymbol.ReturnType.TypeKind == TypeKind.TypeParameter && string.Equals(methodSymbol.ReturnType.Name, typeParameter.Name, StringComparison.Ordinal);
+        var returnTypeIsGeneric =
+            methodSymbol.ReturnType.TypeKind == TypeKind.TypeParameter
+            && string.Equals(methodSymbol.ReturnType.Name, typeParameter.Name, StringComparison.Ordinal);
         var hasSourceParameter = sourceParameter != null;
-        var sourceParameterIsGeneric = sourceParameter?.Type.TypeKind == TypeKind.TypeParameter && string.Equals(sourceParameter.Type.Name, typeParameter.Name, StringComparison.Ordinal);
+        var sourceParameterIsGeneric =
+            sourceParameter?.Type.TypeKind == TypeKind.TypeParameter
+            && string.Equals(sourceParameter.Type.Name, typeParameter.Name, StringComparison.Ordinal);
 
         if (returnTypeIsGeneric && hasSourceParameter && sourceParameterIsGeneric)
         {
@@ -67,12 +77,12 @@ public static class ObjectFactoryBuilder
         if (returnTypeIsGeneric)
         {
             return hasSourceParameter
-                ? new GenericTargetObjectFactoryWithSource(methodSymbol, ctx.Compilation)
-                : new GenericTargetObjectFactory(methodSymbol, ctx.Compilation);
+                ? new GenericTargetObjectFactoryWithSource(ctx.GenericTypeChecker, ctx.SymbolAccessor, methodSymbol)
+                : new GenericTargetObjectFactory(ctx.GenericTypeChecker, ctx.SymbolAccessor, methodSymbol);
         }
 
         if (hasSourceParameter)
-            return new GenericSourceObjectFactory(methodSymbol, ctx.Compilation);
+            return new GenericSourceObjectFactory(ctx.GenericTypeChecker, ctx.SymbolAccessor, methodSymbol);
 
         ctx.ReportDiagnostic(DiagnosticDescriptors.InvalidObjectFactorySignature, methodSymbol, methodSymbol.Name);
         return null;
@@ -100,6 +110,6 @@ public static class ObjectFactoryBuilder
             return null;
         }
 
-        return new GenericSourceTargetObjectFactory(methodSymbol, ctx.Compilation, sourceParameterIndex);
+        return new GenericSourceTargetObjectFactory(ctx.GenericTypeChecker, ctx.SymbolAccessor, methodSymbol, sourceParameterIndex);
     }
 }

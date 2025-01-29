@@ -5,61 +5,36 @@ public class SameTypeTest
     [Fact]
     public void ReadOnlyStructToSameReadOnlyStruct()
     {
-        var source = TestSourceBuilder.Mapping(
-            "A",
-            "A",
-            "readonly struct A {}");
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("A", "A", "readonly struct A {}");
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
     public void ReadOnlyStructToSameReadOnlyStructDeepCloning()
     {
-        var source = TestSourceBuilder.Mapping(
-            "A",
-            "A",
-            TestSourceBuilderOptions.WithDeepCloning,
-            "readonly struct A {}");
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("A", "A", TestSourceBuilderOptions.WithDeepCloning, "readonly struct A {}");
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
     public void StringToString()
     {
-        var source = TestSourceBuilder.Mapping(
-            "string",
-            "string");
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("string", "string");
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
     public void StringToStringDeepCloning()
     {
-        var source = TestSourceBuilder.Mapping(
-            "string",
-            "string",
-            TestSourceBuilderOptions.WithDeepCloning);
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("string", "string", TestSourceBuilderOptions.WithDeepCloning);
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
     public void MutableStructToSameMutableStruct()
     {
-        var source = TestSourceBuilder.Mapping(
-            "A",
-            "A",
-            "struct A {}");
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("A", "A", "struct A {}");
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
@@ -69,36 +44,53 @@ public class SameTypeTest
             "A",
             "A",
             TestSourceBuilderOptions.WithDeepCloning,
-            "struct A {}");
-        TestHelper.GenerateMapper(source)
+            "struct A { public string Value { get; set; } }"
+        );
+        TestHelper
+            .GenerateMapper(source)
             .Should()
-            .HaveSingleMethodBody(@"var target = new A();
-    return target;");
+            .HaveSingleMethodBody(
+                """
+                var target = new global::A();
+                target.Value = source.Value;
+                return target;
+                """
+            );
+    }
+
+    [Fact]
+    public void UnmanagedStructToSameUnmanagedStructDeepCloning()
+    {
+        var source = TestSourceBuilder.Mapping("A", "A", TestSourceBuilderOptions.WithDeepCloning, "struct A {}");
+        TestHelper
+            .GenerateMapper(source)
+            .Should()
+            .HaveSingleMethodBody(
+                """
+                return source;
+                """
+            );
     }
 
     [Fact]
     public void ClassToSameClass()
     {
-        var source = TestSourceBuilder.Mapping(
-            "A",
-            "A",
-            "class A { public string StringValue { get; set; } }");
-        TestHelper.GenerateMapper(source)
-            .Should()
-            .HaveSingleMethodBody("return source;");
+        var source = TestSourceBuilder.Mapping("A", "A", "class A { public string StringValue { get; set; } }");
+        TestHelper.GenerateMapper(source).Should().HaveSingleMethodBody("return source;");
     }
 
     [Fact]
     public void ClassToSameClassDeepCloning()
     {
-        var source = TestSourceBuilder.Mapping(
-            "A",
-            "A",
-            TestSourceBuilderOptions.WithDeepCloning,
-            "class A {}");
-        TestHelper.GenerateMapper(source)
+        var source = TestSourceBuilder.Mapping("A", "A", TestSourceBuilderOptions.WithDeepCloning, "class A {}");
+        TestHelper
+            .GenerateMapper(source)
             .Should()
-            .HaveSingleMethodBody(@"var target = new A();
-    return target;");
+            .HaveSingleMethodBody(
+                """
+                var target = new global::A();
+                return target;
+                """
+            );
     }
 }

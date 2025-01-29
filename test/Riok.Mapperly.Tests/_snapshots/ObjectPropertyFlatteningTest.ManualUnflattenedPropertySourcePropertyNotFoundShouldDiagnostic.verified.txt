@@ -1,28 +1,84 @@
 ﻿{
   Diagnostics: [
     {
-      Id: RMG006,
-      Title: Mapping source property not found,
+      Location: /*
+{
+    [MapProperty("MyValueIdXXX", "Value.Id")] private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,78),
+      Message: Specified member MyValueIdXXX on source type A was not found,
       Severity: Error,
-      WarningLevel: 0,
-      Location: : (11,4)-(11,71),
-      Description: ,
-      HelpLink: ,
-      MessageFormat: Specified property {0} on source type {1} was not found,
-      Message: Specified property MyValueIdXXX on source type A was not found,
-      Category: Mapper
+      Descriptor: {
+        Id: RMG006,
+        Title: Mapping source member not found,
+        MessageFormat: Specified member {0} on source type {1} was not found,
+        Category: Mapper,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
     },
     {
-      Id: RMG020,
-      Title: Source property is not mapped to any target property,
-      Severity: Info,
+      Location: /*
+{
+    [MapProperty("MyValueIdXXX", "Value.Id")] private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,78),
+      Message: The member MyValueId on the mapping source type A is not mapped to any member on the mapping target type B,
+      Severity: Warning,
       WarningLevel: 1,
-      Location: : (11,4)-(11,71),
-      Description: ,
-      HelpLink: ,
-      MessageFormat: The property {0} on the mapping source type {1} is not mapped to any property on the mapping target type {2},
-      Message: The property MyValueId on the mapping source type A is not mapped to any property on the mapping target type B,
-      Category: Mapper
+      Descriptor: {
+        Id: RMG020,
+        Title: Source member is not mapped to any target member,
+        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
+        Category: Mapper,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: /*
+{
+    [MapProperty("MyValueIdXXX", "Value.Id")] private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,78),
+      Message: The member Value on the mapping target type B was not found on the mapping source type A,
+      Severity: Warning,
+      WarningLevel: 1,
+      Descriptor: {
+        Id: RMG012,
+        Title: Source member was not found for target member,
+        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
+        Category: Mapper,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: /*
+{
+    [MapProperty("MyValueIdXXX", "Value.Id")] private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,78),
+      Message: No members are mapped in the object mapping from A to B,
+      Severity: Warning,
+      WarningLevel: 1,
+      Descriptor: {
+        Id: RMG066,
+        Title: No members are mapped in an object mapping,
+        HelpLink: https://localhost:3000/docs/configuration/analyzer-diagnostics/RMG066,
+        MessageFormat: No members are mapped in the object mapping from {0} to {1},
+        Category: Mapper,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
     }
   ]
 }

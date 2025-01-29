@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 
 namespace Riok.Mapperly.IntegrationTests.Models
 {
@@ -8,6 +10,7 @@ namespace Riok.Mapperly.IntegrationTests.Models
         {
             CtorValue = ctorValue;
             CtorValue2 = ctorValue2;
+            PrivateValue = ctorValue + 11;
         }
 
         public int CtorValue { get; set; }
@@ -23,6 +26,8 @@ namespace Riok.Mapperly.IntegrationTests.Models
 #else
         public int RequiredValue { get; init; }
 #endif
+
+        public int UnmappedValue => 10;
 
         public string StringValue { get; set; } = string.Empty;
 
@@ -40,7 +45,11 @@ namespace Riok.Mapperly.IntegrationTests.Models
 
         public TestObjectNested? NestedNullableTargetNotNullable { get; set; }
 
+        public TestObjectNestedMember? NestedMember { get; set; }
+
         public string? StringNullableTargetNotNullable { get; set; }
+
+        public (string A, string)? TupleValue { get; set; }
 
         public TestObject? RecursiveObject { get; set; }
 
@@ -48,7 +57,52 @@ namespace Riok.Mapperly.IntegrationTests.Models
 
         public IReadOnlyCollection<TestObjectNested>? NullableReadOnlyObjectCollection { get; set; }
 
+        public Span<string> SpanValue => new[] { "1", "2", "3" };
+
+        public Memory<string> MemoryValue { get; set; }
+
+        public Stack<string> StackValue { get; set; } = new();
+
+        public Queue<string> QueueValue { get; set; } = new();
+
+        public ImmutableArray<string> ImmutableArrayValue { get; set; } = ImmutableArray<string>.Empty;
+
+        public ImmutableList<string> ImmutableListValue { get; set; } = ImmutableList<string>.Empty;
+
+        public ImmutableHashSet<string> ImmutableHashSetValue { get; set; } = ImmutableHashSet<string>.Empty;
+
+        public ImmutableQueue<string> ImmutableQueueValue { get; set; } = ImmutableQueue<string>.Empty;
+
+        public ImmutableStack<string> ImmutableStackValue { get; set; } = ImmutableStack<string>.Empty;
+
+        public ImmutableSortedSet<string> ImmutableSortedSetValue { get; set; } = ImmutableSortedSet<string>.Empty;
+
+        public ImmutableDictionary<string, string> ImmutableDictionaryValue { get; set; } = ImmutableDictionary<string, string>.Empty;
+
+        public ImmutableSortedDictionary<string, string> ImmutableSortedDictionaryValue { get; set; } =
+            ImmutableSortedDictionary<string, string>.Empty;
+
+        public ISet<string> ExistingISet { get; } = new HashSet<string>();
+
+        public HashSet<string> ExistingHashSet { get; } = new();
+
+        public SortedSet<string> ExistingSortedSet { get; } = new();
+
+        public List<string> ExistingList { get; } = new();
+
+        public ISet<string> ISet { get; set; } = new HashSet<string>();
+
+#if NET5_0_OR_GREATER
+        public IReadOnlySet<string> IReadOnlySet { get; set; } = new HashSet<string>();
+#endif
+
+        public HashSet<string> HashSet { get; set; } = new HashSet<string>();
+
+        public SortedSet<string> SortedSet { get; set; } = new SortedSet<string>();
+
         public TestEnum EnumValue { get; set; }
+
+        public TestFlagsEnum FlagsEnumValue { get; set; }
 
         public TestEnum EnumName { get; set; }
 
@@ -63,5 +117,37 @@ namespace Riok.Mapperly.IntegrationTests.Models
         public string? IgnoredStringValue { get; set; }
 
         public int IgnoredIntValue { get; set; }
+
+        public DateTime DateTimeValue { get; set; }
+
+        public DateTime DateTimeValueTargetDateOnly { get; set; }
+
+        public DateTime DateTimeValueTargetTimeOnly { get; set; }
+
+#if NET5_0_OR_GREATER
+        public Guid ToByteArrayWithInstanceMethod { get; set; }
+#endif
+
+        public ConvertWithStaticMethodObject? WithCreateMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithCreateFromMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithFromSingleMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithCreateParamsMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithCreateFromParamsMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithFromShortParamsMethod { get; set; }
+
+        public ConvertWithStaticMethodObject? WithToDecimalMethod { get; set; }
+
+        public int ExposePrivateValue => PrivateValue;
+
+        private int PrivateValue { get; set; }
+
+        public int SumComponent1 { get; set; }
+
+        public int SumComponent2 { get; set; }
     }
 }

@@ -1,9 +1,12 @@
+using System.Diagnostics;
+
 namespace Riok.Mapperly.Abstractions;
 
 /// <summary>
 /// Customizes how enums are mapped.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method)]
+[Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
 public sealed class MapEnumAttribute : Attribute
 {
     /// <summary>
@@ -15,9 +18,8 @@ public sealed class MapEnumAttribute : Attribute
         Strategy = strategy;
     }
 
-
     /// <summary>
-    /// The strategy to be used to map enums.
+    /// The strategy to be used to map enums to enums.
     /// </summary>
     public EnumMappingStrategy Strategy { get; }
 
@@ -25,4 +27,14 @@ public sealed class MapEnumAttribute : Attribute
     /// Whether the case should be ignored during mappings.
     /// </summary>
     public bool IgnoreCase { get; set; }
+
+    /// <summary>
+    /// The fallback value if an enum cannot be mapped, used instead of throwing.
+    /// </summary>
+    public object? FallbackValue { get; set; }
+
+    /// <summary>
+    /// The strategy to be used to map enums from/to strings.
+    /// </summary>
+    public EnumNamingStrategy NamingStrategy { get; set; }
 }

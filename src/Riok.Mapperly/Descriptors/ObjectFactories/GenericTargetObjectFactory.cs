@@ -1,7 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Riok.Mapperly.Helpers;
-using static Riok.Mapperly.Emit.SyntaxFactoryHelper;
+using static Riok.Mapperly.Emit.Syntax.SyntaxFactoryHelper;
 
 namespace Riok.Mapperly.Descriptors.ObjectFactories;
 
@@ -10,18 +10,12 @@ namespace Riok.Mapperly.Descriptors.ObjectFactories;
 /// without any parameters but a single type parameter which is also the return type.
 /// Example signature: <c>T Create&lt;T&gt;();</c>
 /// </summary>
-public class GenericTargetObjectFactory : ObjectFactory
+public class GenericTargetObjectFactory(GenericTypeChecker typeChecker, SymbolAccessor symbolAccessor, IMethodSymbol method)
+    : ObjectFactory(symbolAccessor, method)
 {
-    private readonly Compilation _compilation;
+    public override bool CanCreateInstanceOfType(ITypeSymbol sourceType, ITypeSymbol targetTypeToCreate) =>
+        typeChecker.CheckTypes((Method.TypeParameters[0], targetTypeToCreate));
 
-    public GenericTargetObjectFactory(IMethodSymbol method, Compilation compilation) : base(method)
-    {
-        _compilation = compilation;
-    }
-
-    public override bool CanCreateType(ITypeSymbol sourceType, ITypeSymbol targetTypeToCreate)
-        => Method.TypeParameters[0].CanConsumeType(_compilation, targetTypeToCreate);
-
-    protected override ExpressionSyntax BuildCreateType(ITypeSymbol sourceType, ITypeSymbol targetTypeToCreate, ExpressionSyntax source)
-        => GenericInvocation(Method.Name, new[] { NonNullableIdentifier(targetTypeToCreate) });
+    protected override ExpressionSyntax BuildCreateType(ITypeSymbol sourceType, ITypeSymbol targetTypeToCreate, ExpressionSyntax source) =>
+        GenericInvocationWithoutIndention(Method.Name, [NonNullableIdentifier(targetTypeToCreate)]);
 }

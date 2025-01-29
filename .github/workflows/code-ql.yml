@@ -10,6 +10,10 @@ on:
   schedule:
     - cron: '45 11 * * 6'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze
@@ -26,10 +30,10 @@ jobs:
           - csharp
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: github/codeql-action/init@v2
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
         with:
           languages: ${{ matrix.language }}
-      - uses: actions/setup-dotnet@v3.0.3
+      - uses: actions/setup-dotnet@v4
       - run: dotnet build
-      - uses: github/codeql-action/analyze@v2
+      - uses: github/codeql-action/analyze@v3

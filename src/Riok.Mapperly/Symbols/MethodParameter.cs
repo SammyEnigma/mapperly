@@ -1,32 +1,18 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Riok.Mapperly.Helpers;
 
 namespace Riok.Mapperly.Symbols;
 
-public readonly struct MethodParameter
+public readonly record struct MethodParameter(int Ordinal, string Name, ITypeSymbol Type)
 {
-    public MethodParameter(int ordinal, string name, ITypeSymbol type)
-    {
-        Ordinal = ordinal;
-        Name = name;
-        Type = type;
-    }
+    private static readonly SymbolDisplayFormat _parameterNameFormat = new(
+        parameterOptions: SymbolDisplayParameterOptions.IncludeName,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers
+    );
 
-    public MethodParameter(IParameterSymbol symbol)
-        : this(symbol.Ordinal, symbol.Name, symbol.Type.UpgradeNullable())
-    {
-    }
+    public MethodParameter(IParameterSymbol symbol, ITypeSymbol parameterType)
+        : this(symbol.Ordinal, symbol.ToDisplayString(_parameterNameFormat), parameterType) { }
 
-    public int Ordinal { get; }
-
-    public string Name { get; }
-
-    public ITypeSymbol Type { get; }
-
-    public MethodArgument WithArgument(ExpressionSyntax? argument)
-        => new(this, argument ?? throw new ArgumentNullException(nameof(argument)));
-
-    public static MethodParameter? Wrap(IParameterSymbol? symbol)
-        => symbol == null ? null : new(symbol);
+    public MethodArgument WithArgument(ExpressionSyntax? argument) =>
+        new(this, argument ?? throw new ArgumentNullException(nameof(argument)));
 }

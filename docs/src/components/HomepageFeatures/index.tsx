@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import styles from './styles.module.css';
+import Heading from '@theme/Heading';
 
 type FeatureItem = {
   title: string;
@@ -38,7 +39,7 @@ const FeatureList: FeatureItem[] = [
     description: (
       <>
         Mapperly works by using .NET Source Generators. Since no reflection is
-        used at runtime, the generated code is completely trimming save and AOT
+        used at runtime, the generated code is completely trimming safe and AOT
         friendly.
       </>
     ),
@@ -52,7 +53,7 @@ function Feature({ title, Svg, description }: FeatureItem) {
         <Svg className={styles.featureSvg} role="img" />
       </div>
       <div className="text--center padding-horiz--md">
-        <h3>{title}</h3>
+        <Heading as={'h3'}>{title}</Heading>
         <p>{description}</p>
       </div>
     </div>

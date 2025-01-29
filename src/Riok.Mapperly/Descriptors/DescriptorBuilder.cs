@@ -1,199 +1,196 @@
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Riok.Mapperly.Abstractions;
+using Riok.Mapperly.Abstractions.ReferenceHandling;
 using Riok.Mapperly.Configuration;
-using Riok.Mapperly.Descriptors.MappingBodyBuilder;
-using Riok.Mapperly.Descriptors.MappingBuilder;
-using Riok.Mapperly.Descriptors.Mappings;
+using Riok.Mapperly.Descriptors.Constructors;
+using Riok.Mapperly.Descriptors.ExternalMappings;
+using Riok.Mapperly.Descriptors.FormatProviders;
+using Riok.Mapperly.Descriptors.MappingBodyBuilders;
+using Riok.Mapperly.Descriptors.MappingBuilders;
+using Riok.Mapperly.Descriptors.Mappings.UserMappings;
 using Riok.Mapperly.Descriptors.ObjectFactories;
+using Riok.Mapperly.Descriptors.UnsafeAccess;
+using Riok.Mapperly.Diagnostics;
 using Riok.Mapperly.Helpers;
+using Riok.Mapperly.Symbols;
 
 namespace Riok.Mapperly.Descriptors;
 
 public class DescriptorBuilder
 {
-    private delegate ITypeMapping? MappingBuilder(MappingBuilderContext context);
+    private const string UnsafeAccessorName = "System.Runtime.CompilerServices.UnsafeAccessorAttribute";
 
-    private static readonly IReadOnlyCollection<MappingBuilder> _mappingBuilders = new MappingBuilder[]
-    {
-        NullableMappingBuilder.TryBuildMapping,
-        SpecialTypeMappingBuilder.TryBuildMapping,
-        DirectAssignmentMappingBuilder.TryBuildMapping,
-        DictionaryMappingBuilder.TryBuildMapping,
-        EnumerableMappingBuilder.TryBuildMapping,
-        ImplicitCastMappingBuilder.TryBuildMapping,
-        ParseMappingBuilder.TryBuildMapping,
-        CtorMappingBuilder.TryBuildMapping,
-        StringToEnumMappingBuilder.TryBuildMapping,
-        EnumToStringMappingBuilder.TryBuildMapping,
-        EnumMappingBuilder.TryBuildMapping,
-        ExplicitCastMappingBuilder.TryBuildMapping,
-        ToStringMappingBuilder.TryBuildMapping,
-        NewInstanceObjectPropertyMappingBuilder.TryBuildMapping,
-    };
-
-    private readonly SourceProductionContext _context;
-    private readonly ITypeSymbol _mapperSymbol;
     private readonly MapperDescriptor _mapperDescriptor;
-
-    // default configurations, used a configuration is needed but no configuration is provided by the user
-    // these are the default configurations registered for each configuration attribute.
-    // Usually these are derived from the mapper attribute or default values.
-    private readonly Dictionary<Type, Attribute> _defaultConfigurations = new();
-
-    // queue of mappings which don't have the body built yet
-    private readonly Queue<(ITypeMapping, MappingBuilderContext)> _mappingsToBuildBody = new();
+    private readonly SymbolAccessor _symbolAccessor;
+    private readonly WellKnownTypes _types;
 
     private readonly MappingCollection _mappings = new();
+    private readonly InlinedExpressionMappingCollection _inlineMappings = new();
 
     private readonly MethodNameBuilder _methodNameBuilder = new();
+    private readonly MappingBodyBuilder _mappingBodyBuilder;
+    private readonly SimpleMappingBuilderContext _builderContext;
+    private readonly DiagnosticCollection _diagnostics;
+    private readonly UnsafeAccessorContext _unsafeAccessorContext;
 
     public DescriptorBuilder(
-        SourceProductionContext sourceContext,
-        Compilation compilation,
-        ClassDeclarationSyntax mapperSyntax,
-        INamedTypeSymbol mapperSymbol)
+        CompilationContext compilationContext,
+        MapperDeclaration mapperDeclaration,
+        SymbolAccessor symbolAccessor,
+        MapperConfiguration defaultMapperConfiguration
+    )
     {
-        _mapperSymbol = mapperSymbol;
-        _context = sourceContext;
-        Compilation = compilation;
-        WellKnownTypes = new WellKnownTypes(Compilation);
-        _mapperDescriptor = new MapperDescriptor(mapperSyntax, mapperSymbol, _methodNameBuilder);
-        MapperConfiguration = Configure();
+        _mapperDescriptor = new MapperDescriptor(mapperDeclaration, _methodNameBuilder);
+        _symbolAccessor = symbolAccessor;
+        _types = compilationContext.Types;
+        _mappingBodyBuilder = new MappingBodyBuilder(_mappings);
+        _unsafeAccessorContext = new UnsafeAccessorContext(_methodNameBuilder, symbolAccessor, _mapperDescriptor.UnsafeAccessorName);
+
+        var attributeAccessor = new AttributeDataAccessor(symbolAccessor);
+        var configurationReader = new MapperConfigurationReader(
+            attributeAccessor,
+            _types,
+            mapperDeclaration.Symbol,
+            defaultMapperConfiguration
+        );
+        _diagnostics = new DiagnosticCollection(mapperDeclaration.Syntax.GetLocation());
+
+        _builderContext = new SimpleMappingBuilderContext(
+            compilationContext,
+            mapperDeclaration,
+            configurationReader,
+            _symbolAccessor,
+            new GenericTypeChecker(_symbolAccessor, _types),
+            attributeAccessor,
+            _unsafeAccessorContext,
+            _diagnostics,
+            new MappingBuilder(_mappings, mapperDeclaration),
+            new ExistingTargetMappingBuilder(_mappings),
+            _inlineMappings,
+            mapperDeclaration.Syntax.GetLocation()
+        );
     }
 
-    internal IReadOnlyDictionary<Type, Attribute> DefaultConfigurations => _defaultConfigurations;
-
-    internal Compilation Compilation { get; }
-
-    internal WellKnownTypes WellKnownTypes { get; }
-
-    internal ObjectFactoryCollection ObjectFactories { get; private set; } = ObjectFactoryCollection.Empty;
-
-    public MapperAttribute MapperConfiguration { get; }
-
-    private MapperAttribute Configure()
+    public (MapperDescriptor descriptor, DiagnosticCollection diagnostics) Build(CancellationToken cancellationToken)
     {
-        var mapperAttribute = AttributeDataAccessor.AccessFirstOrDefault<MapperAttribute>(Compilation, _mapperSymbol) ?? new();
-        if (!_mapperSymbol.ContainingNamespace.IsGlobalNamespace)
-        {
-            _mapperDescriptor.Namespace = _mapperSymbol.ContainingNamespace.ToDisplayString();
-        }
-
-        _defaultConfigurations.Add(
-            typeof(MapEnumAttribute),
-            new MapEnumAttribute(mapperAttribute.EnumMappingStrategy) { IgnoreCase = mapperAttribute.EnumMappingIgnoreCase });
-        return mapperAttribute;
-    }
-
-    public MapperDescriptor Build()
-    {
+        ConfigureMemberVisibility();
         ReserveMethodNames();
-        ExtractObjectFactories();
         ExtractUserMappings();
-        BuildMappingBodies();
+
+        // ExtractObjectFactories needs to be called after ExtractUserMappings due to configuring mapperDescriptor.Static
+        var objectFactories = ExtractObjectFactories();
+        var constructorFactory = new InstanceConstructorFactory(objectFactories, _symbolAccessor, _unsafeAccessorContext);
+        var formatProviders = ExtractFormatProviders();
+        EnqueueUserMappings(constructorFactory, formatProviders);
+        ExtractExternalMappings();
+        _mappingBodyBuilder.BuildMappingBodies(cancellationToken);
+        AddUserMappingDiagnostics();
         BuildMappingMethodNames();
         BuildReferenceHandlingParameters();
         AddMappingsToDescriptor();
-        return _mapperDescriptor;
+        AddAccessorsToDescriptor();
+        return (_mapperDescriptor, _diagnostics);
     }
 
-    private void ExtractObjectFactories()
+    /// <summary>
+    /// Sets the member and constructor visibility filter on the <see cref="_symbolAccessor"/> after validation.
+    /// If <see cref="MemberVisibility.Accessible"/> is not set and the compilation does not have UnsafeAccessors,
+    /// emit a diagnostic and update the <see cref="MemberVisibility"/> to include <see cref="MemberVisibility.Accessible"/>.
+    /// </summary>
+    private void ConfigureMemberVisibility()
     {
-        var ctx = new SimpleMappingBuilderContext(this);
-        ObjectFactories = ObjectFactoryBuilder.ExtractObjectFactories(ctx, _mapperSymbol);
-    }
-    public ITypeMapping? FindMapping(ITypeSymbol sourceType, ITypeSymbol targetType)
-        => _mappings.FindMapping(sourceType, targetType);
+        var includedMembers = _builderContext.Configuration.Mapper.IncludedMembers;
+        var includedConstructors = _builderContext.Configuration.Mapper.IncludedConstructors;
 
-    public ITypeMapping? FindOrBuildMapping(
-        ITypeSymbol sourceType,
-        ITypeSymbol targetType)
-    {
-        if (_mappings.FindMapping(sourceType, targetType) is { } foundMapping)
-            return foundMapping;
-
-        if (BuildDelegateMapping(null, sourceType, targetType) is not { } mapping)
-            return null;
-
-        _mappings.AddMapping(mapping);
-        return mapping;
-    }
-
-    public ITypeMapping? BuildMappingWithUserSymbol(
-        ISymbol userSymbol,
-        ITypeSymbol sourceType,
-        ITypeSymbol targetType)
-    {
-        if (BuildDelegateMapping(userSymbol, sourceType, targetType) is not { } mapping)
-            return null;
-
-        _mappings.AddMapping(mapping);
-        return mapping;
-    }
-
-    public ITypeMapping? BuildDelegateMapping(
-        ISymbol? userSymbol,
-        ITypeSymbol sourceType,
-        ITypeSymbol targetType)
-    {
-        var ctx = new MappingBuilderContext(this, sourceType, targetType, userSymbol);
-        foreach (var mappingBuilder in _mappingBuilders)
+        if (_types.TryGet(UnsafeAccessorName) != null)
         {
-            if (mappingBuilder(ctx) is { } mapping)
-            {
-                _mappingsToBuildBody.Enqueue((mapping, ctx));
-                return mapping;
-            }
+            _symbolAccessor.SetMemberVisibility(includedMembers);
+            _symbolAccessor.SetConstructorVisibility(includedConstructors);
+            return;
         }
 
-        return null;
-    }
-
-    internal void ReportDiagnostic(DiagnosticDescriptor descriptor, Location? location, params object[] messageArgs)
-        => _context.ReportDiagnostic(Diagnostic.Create(descriptor, location ?? _mapperDescriptor.Syntax.GetLocation(), messageArgs));
-
-    private void ExtractUserMappings()
-    {
-        var defaultContext = new SimpleMappingBuilderContext(this);
-        foreach (var userMapping in UserMethodMappingBuilder.ExtractUserMappings(defaultContext, _mapperSymbol))
+        if (includedMembers.HasFlag(MemberVisibility.Accessible) && includedConstructors.HasFlag(MemberVisibility.Accessible))
         {
-            _mappings.AddMapping(userMapping);
-
-            var ctx = new MappingBuilderContext(
-                this,
-                userMapping.SourceType,
-                userMapping.TargetType,
-                userMapping.Method);
-            _mappingsToBuildBody.Enqueue((userMapping, ctx));
+            return;
         }
+
+        _diagnostics.ReportDiagnostic(DiagnosticDescriptors.UnsafeAccessorNotAvailable);
+        _symbolAccessor.SetMemberVisibility(includedMembers | MemberVisibility.Accessible);
+        _symbolAccessor.SetConstructorVisibility(includedConstructors | MemberVisibility.Accessible);
     }
 
     private void ReserveMethodNames()
     {
-        foreach (var methodSymbol in _mapperSymbol.GetAllMembers())
+        foreach (var methodSymbol in _symbolAccessor.GetAllMembers(_mapperDescriptor.Symbol))
         {
             _methodNameBuilder.Reserve(methodSymbol.Name);
         }
     }
 
-    private void BuildMappingBodies()
+    private void ExtractUserMappings()
     {
-        foreach (var (typeMapping, ctx) in _mappingsToBuildBody.DequeueAll())
+        _mapperDescriptor.Static = _mapperDescriptor.Symbol.IsStatic;
+        IMethodSymbol? firstNonStaticUserMapping = null;
+
+        foreach (var userMapping in UserMethodMappingExtractor.ExtractUserMappings(_builderContext, _mapperDescriptor.Symbol))
         {
-            switch (typeMapping)
+            // if a user defined mapping method is static, all of them need to be static to avoid confusion for mapping method resolution
+            // however, user implemented mapping methods are allowed to be static in a non-static context.
+            // Therefore we are only interested in partial method definitions here.
+            if (userMapping.Method is { IsStatic: true, IsPartialDefinition: true })
             {
-                case NewInstanceObjectPropertyMapping mapping:
-                    NewInstanceObjectPropertyMappingBodyBuilder.BuildMappingBody(ctx, mapping);
-                    break;
-                case ObjectPropertyMapping mapping:
-                    ObjectPropertyMappingBodyBuilder.BuildMappingBody(ctx, mapping);
-                    break;
-                case UserDefinedNewInstanceMethodMapping mapping:
-                    UserMethodMappingBodyBuilder.BuildMappingBody(ctx, mapping);
-                    break;
+                _mapperDescriptor.Static = true;
             }
+            else if (firstNonStaticUserMapping == null && !userMapping.Method.IsStatic)
+            {
+                firstNonStaticUserMapping = userMapping.Method;
+            }
+
+            AddUserMapping(userMapping, false, true);
         }
+
+        if (_mapperDescriptor.Static && firstNonStaticUserMapping is not null)
+        {
+            _diagnostics.ReportDiagnostic(
+                DiagnosticDescriptors.MixingStaticPartialWithInstanceMethod,
+                firstNonStaticUserMapping,
+                _mapperDescriptor.Symbol.ToDisplayString()
+            );
+        }
+    }
+
+    private ObjectFactoryCollection ExtractObjectFactories()
+    {
+        return ObjectFactoryBuilder.ExtractObjectFactories(_builderContext, _mapperDescriptor.Symbol, _mapperDescriptor.Static);
+    }
+
+    private void EnqueueUserMappings(InstanceConstructorFactory constructorFactory, FormatProviderCollection formatProviders)
+    {
+        foreach (var userMapping in _mappings.UserMappings)
+        {
+            var ctx = new MappingBuilderContext(
+                _builderContext,
+                constructorFactory,
+                formatProviders,
+                userMapping,
+                new TypeMappingKey(userMapping.SourceType, userMapping.TargetType)
+            );
+
+            _mappings.EnqueueToBuildBody(userMapping, ctx);
+        }
+    }
+
+    private void ExtractExternalMappings()
+    {
+        foreach (var externalMapping in ExternalMappingsExtractor.ExtractExternalMappings(_builderContext, _mapperDescriptor.Symbol))
+        {
+            AddUserMapping(externalMapping, true, false);
+        }
+    }
+
+    private FormatProviderCollection ExtractFormatProviders()
+    {
+        return FormatProviderBuilder.ExtractFormatProviders(_builderContext, _mapperDescriptor.Symbol, _mapperDescriptor.Static);
     }
 
     private void BuildMappingMethodNames()
@@ -206,21 +203,54 @@ public class DescriptorBuilder
 
     private void BuildReferenceHandlingParameters()
     {
-        if (!MapperConfiguration.UseReferenceHandling)
+        if (!_builderContext.Configuration.Mapper.UseReferenceHandling)
             return;
 
         foreach (var methodMapping in _mappings.MethodMappings)
         {
-            methodMapping.EnableReferenceHandling(WellKnownTypes.IReferenceHandler);
+            methodMapping.EnableReferenceHandling(_builderContext.Types.Get<IReferenceHandler>());
         }
     }
 
     private void AddMappingsToDescriptor()
     {
         // add generated mappings to the mapper
-        foreach (var mapping in _mappings.All)
+        _mapperDescriptor.AddMethodMappings(_mappings.MethodMappings);
+    }
+
+    private void AddAccessorsToDescriptor()
+    {
+        // add generated accessors to the mapper
+        _mapperDescriptor.AddUnsafeAccessors(_unsafeAccessorContext.Accessors);
+    }
+
+    private void AddUserMapping(IUserMapping mapping, bool ignoreDuplicates, bool named)
+    {
+        var name = named ? mapping.Method.Name : null;
+        var result = _mappings.AddUserMapping(mapping, name);
+        if (!ignoreDuplicates && mapping.Default == true && result == MappingCollectionAddResult.NotAddedDuplicated)
         {
-            _mapperDescriptor.AddTypeMapping(mapping);
+            _diagnostics.ReportDiagnostic(
+                DiagnosticDescriptors.MultipleDefaultUserMappings,
+                mapping.Method,
+                mapping.SourceType.ToDisplayString(),
+                mapping.TargetType.ToDisplayString()
+            );
+        }
+
+        _inlineMappings.AddUserMapping(mapping, name);
+    }
+
+    private void AddUserMappingDiagnostics()
+    {
+        foreach (var mapping in _mappings.UsedDuplicatedNonDefaultNonReferencedUserMappings)
+        {
+            _diagnostics.ReportDiagnostic(
+                DiagnosticDescriptors.MultipleUserMappingsWithoutDefault,
+                mapping.Method,
+                mapping.SourceType.ToDisplayString(),
+                mapping.TargetType.ToDisplayString()
+            );
         }
     }
 }

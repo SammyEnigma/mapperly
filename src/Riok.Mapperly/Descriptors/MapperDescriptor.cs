@@ -1,33 +1,69 @@
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Riok.Mapperly.Descriptors.Mappings;
+using Riok.Mapperly.Descriptors.UnsafeAccess;
 using Riok.Mapperly.Helpers;
+using Riok.Mapperly.Symbols;
 
 namespace Riok.Mapperly.Descriptors;
 
 public class MapperDescriptor
 {
+    private const string AccessorClassName = "UnsafeAccessor";
 
-    private readonly List<ITypeMapping> _mappings = new();
+    private readonly MapperDeclaration _declaration;
+    private readonly List<MethodMapping> _methodMappings = [];
+    private readonly List<IUnsafeAccessor> _unsafeAccessors = [];
 
-    public MapperDescriptor(ClassDeclarationSyntax syntax, INamedTypeSymbol symbol, UniqueNameBuilder nameBuilder)
+    public bool Static { get; set; }
+
+    public MapperDescriptor(MapperDeclaration declaration, UniqueNameBuilder nameBuilder)
     {
-        Syntax = syntax;
-        Symbol = symbol;
+        _declaration = declaration;
         NameBuilder = nameBuilder;
+        Name = BuildName(declaration.Symbol);
+        UnsafeAccessorName = nameBuilder.New(AccessorClassName);
+
+        if (!Symbol.ContainingNamespace.IsGlobalNamespace)
+        {
+            Namespace = Symbol.ContainingNamespace.ToDisplayString();
+        }
     }
 
-    public string? Namespace { get; set; }
+    public string Name { get; }
 
-    public ClassDeclarationSyntax Syntax { get; }
+    public string? Namespace { get; }
 
-    public INamedTypeSymbol Symbol { get; }
+    public string UnsafeAccessorName { get; }
+
+    public ClassDeclarationSyntax Syntax => _declaration.Syntax;
+
+    public INamedTypeSymbol Symbol => _declaration.Symbol;
 
     public UniqueNameBuilder NameBuilder { get; }
 
-    public IEnumerable<MethodMapping> MethodTypeMappings
-        => _mappings.OfType<MethodMapping>();
+    public IReadOnlyCollection<MethodMapping> MethodMappings => _methodMappings;
 
-    public void AddTypeMapping(ITypeMapping mapping)
-        => _mappings.Add(mapping);
+    public IReadOnlyCollection<IUnsafeAccessor> UnsafeAccessors => _unsafeAccessors;
+
+    public void AddMethodMappings(IReadOnlyCollection<MethodMapping> mappings) => _methodMappings.AddRange(mappings);
+
+    public void AddUnsafeAccessors(IReadOnlyCollection<IUnsafeAccessor> accessors) => _unsafeAccessors.AddRange(accessors);
+
+    private string BuildName(INamedTypeSymbol symbol)
+    {
+        if (symbol.ContainingType == null)
+            return symbol.Name;
+
+        var sb = new StringBuilder(symbol.Name);
+        var containingType = symbol.ContainingType;
+        while (containingType != null)
+        {
+            sb.Insert(0, '.').Insert(0, containingType.Name);
+            containingType = containingType.ContainingType;
+        }
+
+        return sb.ToString();
+    }
 }

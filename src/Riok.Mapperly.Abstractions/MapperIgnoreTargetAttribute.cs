@@ -1,10 +1,13 @@
+using System.Diagnostics;
+
 namespace Riok.Mapperly.Abstractions;
 
 /// <summary>
 /// Ignores a target property from the mapping.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
-public class MapperIgnoreTargetAttribute : Attribute
+[Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
+public sealed class MapperIgnoreTargetAttribute : Attribute
 {
     /// <summary>
     /// Ignores the specified target property from the mapping.

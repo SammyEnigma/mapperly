@@ -1,12 +1,17 @@
 namespace Riok.Mapperly.Helpers;
 
-public static class QueueExtensions
+internal static class QueueExtensions
 {
-    public static IEnumerable<T> DequeueAll<T>(this Queue<T> q)
+    /// <summary>
+    /// Dequeues all nodes.
+    /// Items added while this operation is in progress are also considered.
+    /// </summary>
+    /// <returns>An enumerable with all items.</returns>
+    public static IEnumerable<TElement> DequeueAll<TElement>(this Queue<TElement> queue)
     {
-        while (q.Count > 0)
+        while (queue.TryDequeue(out var element))
         {
-            yield return q.Dequeue();
+            yield return element;
         }
     }
 }

@@ -4,16 +4,55 @@ namespace Riok.Mapperly.Tests;
 
 public record TestSourceBuilderOptions(
     string? Namespace = null,
-    bool UseDeepCloning = false,
-    bool UseReferenceHandling = false,
-    bool ThrowOnMappingNullMismatch = true,
-    bool ThrowOnPropertyMappingNullMismatch = false,
-    PropertyNameMappingStrategy PropertyNameMappingStrategy = PropertyNameMappingStrategy.CaseSensitive,
-    MappingConversionType EnabledConversions = MappingConversionType.All)
+    string MapperClassName = TestSourceBuilderOptions.DefaultMapperClassName,
+    string? MapperBaseClassName = null,
+    bool? UseDeepCloning = null,
+    bool? UseReferenceHandling = null,
+    bool? ThrowOnMappingNullMismatch = null,
+    bool? ThrowOnPropertyMappingNullMismatch = null,
+    bool? AllowNullPropertyAssignment = null,
+    PropertyNameMappingStrategy? PropertyNameMappingStrategy = null,
+    MappingConversionType? EnabledConversions = null,
+    EnumMappingStrategy? EnumMappingStrategy = null,
+    bool? EnumMappingIgnoreCase = null,
+    IgnoreObsoleteMembersStrategy? IgnoreObsoleteMembersStrategy = null,
+    RequiredMappingStrategy? RequiredMappingStrategy = null,
+    RequiredMappingStrategy? RequiredEnumMappingStrategy = null,
+    MemberVisibility? IncludedMembers = null,
+    MemberVisibility? IncludedConstructors = null,
+    bool Static = false,
+    bool PreferParameterlessConstructors = true,
+    bool AutoUserMappings = true
+)
 {
+    public const string DefaultMapperClassName = "Mapper";
+
     public static readonly TestSourceBuilderOptions Default = new();
+    public static readonly TestSourceBuilderOptions AsStatic = new(Static: true);
     public static readonly TestSourceBuilderOptions WithDeepCloning = new(UseDeepCloning: true);
     public static readonly TestSourceBuilderOptions WithReferenceHandling = new(UseReferenceHandling: true);
+    public static readonly TestSourceBuilderOptions WithDisabledAutoUserMappings = new(AutoUserMappings: false);
+
+    public static readonly TestSourceBuilderOptions PreferParameterizedConstructors = new(PreferParameterlessConstructors: false);
+
+    public static TestSourceBuilderOptions WithBaseClass(string baseClassName) => new(MapperBaseClassName: baseClassName);
+
+    public static TestSourceBuilderOptions WithIgnoreObsolete(IgnoreObsoleteMembersStrategy ignoreObsoleteStrategy) =>
+        new(IgnoreObsoleteMembersStrategy: ignoreObsoleteStrategy);
+
+    public static TestSourceBuilderOptions WithRequiredMappingStrategy(RequiredMappingStrategy requiredMappingStrategy) =>
+        new(RequiredMappingStrategy: requiredMappingStrategy);
+
+    public static TestSourceBuilderOptions WithRequiredEnumMappingStrategy(
+        RequiredMappingStrategy requiredEnumMappingStrategy,
+        RequiredMappingStrategy requiredMappingStrategy
+    ) => new(RequiredEnumMappingStrategy: requiredEnumMappingStrategy, RequiredMappingStrategy: requiredMappingStrategy);
+
+    public static TestSourceBuilderOptions WithMemberVisibility(MemberVisibility memberVisibility) =>
+        new(IncludedMembers: memberVisibility);
+
+    public static TestSourceBuilderOptions WithConstructorVisibility(MemberVisibility memberVisibility) =>
+        new(IncludedConstructors: memberVisibility);
 
     public static TestSourceBuilderOptions WithDisabledMappingConversion(params MappingConversionType[] conversionTypes)
     {

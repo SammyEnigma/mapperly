@@ -2,11 +2,13 @@
 
 [![Nuget](https://img.shields.io/nuget/v/Riok.Mapperly?style=flat-square)](https://www.nuget.org/packages/Riok.Mapperly/)
 [![Nuget Preview](https://img.shields.io/nuget/vpre/Riok.Mapperly?style=flat-square&label=nuget%20preview)](https://www.nuget.org/packages/Riok.Mapperly/)
-[![GitHub](https://img.shields.io/github/license/riok/mapperly?style=flat-square)](https://github.com/riok/mapperly/blob/main/LICENSE)
+[![License](https://img.shields.io/github/license/riok/mapperly?style=flat-square)](https://github.com/riok/mapperly/blob/main/LICENSE)
 [![Downloads](https://img.shields.io/nuget/dt/riok.mapperly?style=flat-square)](https://www.nuget.org/packages/Riok.Mapperly/)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/riok)](https://github.com/sponsors/riok)
 [![GitHub](https://img.shields.io/badge/-source-181717.svg?logo=GitHub)](https://github.com/riok/mapperly)
 
-Mapperly is a .NET source generator for generating object mappings. Inspired by MapStruct.
+
+Mapperly is a .NET source generator for generating object mappings.
 
 Because Mapperly creates the mapping code at build time, there is minimal overhead at runtime.
 Even better, the generated code is perfectly readable, allowing you to verify the generated mapping code easily.
@@ -46,6 +48,10 @@ dto.NumberOfSeats.Should().Be(10);
 ```
 
 [Read the docs](https://mapperly.riok.app/docs/getting-started/installation) for any further information.
+
+## Upgrading
+
+Find a list of breaking changes for each major version and upgrade guides [here](https://mapperly.riok.app/docs/category/upgrading/).
 
 ## How To Contribute
 

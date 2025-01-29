@@ -1,16 +1,23 @@
 ﻿{
   Diagnostics: [
     {
-      Id: RMG008,
-      Title: Could not create mapping,
+      Location: /*
+{
+    private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,36),
+      Message: B has no accessible constructor with mappable arguments,
       Severity: Error,
-      WarningLevel: 0,
-      Location: : (11,4)-(11,28),
-      Description: ,
-      HelpLink: ,
-      MessageFormat: Could not create mapping from {0} to {1}. Consider implementing the mapping manually.,
-      Message: Could not create mapping from A to B. Consider implementing the mapping manually.,
-      Category: Mapper
+      Descriptor: {
+        Id: RMG013,
+        Title: No accessible constructor with mappable arguments found,
+        MessageFormat: {0} has no accessible constructor with mappable arguments,
+        Category: Mapper,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
     }
   ]
 }

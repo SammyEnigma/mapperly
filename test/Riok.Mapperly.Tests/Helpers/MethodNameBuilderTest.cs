@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Moq;
+using NSubstitute;
 using Riok.Mapperly.Descriptors.Mappings;
 using Riok.Mapperly.Helpers;
 
@@ -13,36 +13,26 @@ public class MethodNameBuilderTest
     {
         var builder = new MethodNameBuilder();
         builder.Reserve("MapToA");
-        builder.Build(NewMethodMappingMock("A"))
-            .Should()
-            .Be("MapToA1");
-        builder.Build(NewMethodMappingMock("A"))
-            .Should()
-            .Be("MapToA2");
-        builder.Build(NewMethodMappingMock("B"))
-            .Should()
-            .Be("MapToB");
-        builder.Build(NewMethodMappingMock("B"))
-            .Should()
-            .Be("MapToB1");
+        builder.Build(NewMethodMappingMock("A")).Should().Be("MapToA1");
+        builder.Build(NewMethodMappingMock("A")).Should().Be("MapToA2");
+        builder.Build(NewMethodMappingMock("B")).Should().Be("MapToB");
+        builder.Build(NewMethodMappingMock("B")).Should().Be("MapToB1");
     }
 
     private MethodMapping NewMethodMappingMock(string targetTypeName)
     {
-        var targetTypeMock = new Mock<ITypeSymbol>();
-        targetTypeMock.Setup(x => x.Name).Returns(targetTypeName);
-        targetTypeMock.Setup(x => x.NullableAnnotation).Returns(NullableAnnotation.NotAnnotated);
+        var targetTypeMock = Substitute.For<ITypeSymbol>();
+        targetTypeMock.Name.Returns(targetTypeName);
+        targetTypeMock.NullableAnnotation.Returns(NullableAnnotation.NotAnnotated);
 
-        return new MockedMethodMapping(targetTypeMock.Object);
+        return new MockedMethodMapping(targetTypeMock);
     }
 
     private class MockedMethodMapping : MethodMapping
     {
-        public MockedMethodMapping(ITypeSymbol t) : base(t, t)
-        {
-        }
+        public MockedMethodMapping(ITypeSymbol t)
+            : base(t, t) { }
 
-        public override IEnumerable<StatementSyntax> BuildBody(TypeMappingBuildContext ctx)
-            => Enumerable.Empty<StatementSyntax>();
+        public override IEnumerable<StatementSyntax> BuildBody(TypeMappingBuildContext ctx) => [];
     }
 }

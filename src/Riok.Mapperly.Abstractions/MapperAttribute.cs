@@ -1,12 +1,14 @@
+using System.Diagnostics;
 using Riok.Mapperly.Abstractions.ReferenceHandling;
 
 namespace Riok.Mapperly.Abstractions;
 
 /// <summary>
-/// Marks an abstract class or an interface as a mapper.
+/// Marks a partial class as a mapper.
 /// </summary>
-[AttributeUsage(AttributeTargets.Interface | AttributeTargets.Class)]
-public sealed class MapperAttribute : Attribute
+[AttributeUsage(AttributeTargets.Class)]
+[Conditional("MAPPERLY_ABSTRACTIONS_SCOPE_RUNTIME")]
+public class MapperAttribute : Attribute
 {
     /// <summary>
     /// Strategy on how to match mapping property names.
@@ -18,6 +20,12 @@ public sealed class MapperAttribute : Attribute
     /// Can be overwritten on specific enums via mapping method configurations.
     /// </summary>
     public EnumMappingStrategy EnumMappingStrategy { get; set; } = EnumMappingStrategy.ByValue;
+
+    /// <summary>
+    /// Defines the strategy to use when mapping an enum from/to string.
+    /// Can be overwritten on specific enums via mapping method configurations.
+    /// </summary>
+    public EnumNamingStrategy EnumNamingStrategy { get; set; } = EnumNamingStrategy.MemberName;
 
     /// <summary>
     /// Whether the case should be ignored for enum mappings.
@@ -38,14 +46,24 @@ public sealed class MapperAttribute : Attribute
     /// Specifies the behaviour in the case when the mapper tries to set a non-nullable property to a <c>null</c> value.
     /// If set to <c>true</c> an <see cref="ArgumentNullException"/> is thrown.
     /// If set to <c>false</c> the property assignment is ignored.
+    /// This is ignored for required init properties and <see cref="IQueryable{T}"/> projection mappings.
     /// </summary>
     public bool ThrowOnPropertyMappingNullMismatch { get; set; }
 
     /// <summary>
+    /// Specifies whether <c>null</c> values are assigned to the target.
+    /// If <c>true</c> (default), the source is <c>null</c>, and the target does allow <c>null</c> values,
+    /// <c>null</c> is assigned.
+    /// If <c>false</c>, <c>null</c> values are never assigned to the target property.
+    /// This is ignored for required init properties and <see cref="IQueryable{T}"/> projection mappings.
+    /// </summary>
+    public bool AllowNullPropertyAssignment { get; set; } = true;
+
+    /// <summary>
     /// Whether to always deep copy objects.
     /// Eg. when the type <c>Person[]</c> should be mapped to the same type <c>Person[]</c>,
-    /// with <c><see cref="UseDeepCloning"/>=true</c>, the same array is reused.
-    /// With <c><see cref="UseDeepCloning"/>=false</c>, the array and each person is cloned.
+    /// when <c>false</c>, the same array is reused.
+    /// when <c>true</c>, the array and each person is cloned.
     /// </summary>
     public bool UseDeepCloning { get; set; }
 
@@ -70,4 +88,53 @@ public sealed class MapperAttribute : Attribute
     /// to keep track of and reuse existing target object instances.
     /// </summary>
     public bool UseReferenceHandling { get; set; }
+
+    /// <summary>
+    /// The ignore obsolete attribute strategy. Determines how <see cref="ObsoleteAttribute"/> marked members are mapped.
+    /// Defaults to <see cref="IgnoreObsoleteMembersStrategy.None"/>.
+    /// </summary>
+    public IgnoreObsoleteMembersStrategy IgnoreObsoleteMembersStrategy { get; set; } = IgnoreObsoleteMembersStrategy.None;
+
+    /// <summary>
+    /// Defines the strategy used when emitting warnings for unmapped members.
+    /// By default this is <see cref="RequiredMappingStrategy.Both"/>, emitting warnings for unmapped source and target members.
+    /// </summary>
+    public RequiredMappingStrategy RequiredMappingStrategy { get; set; } = RequiredMappingStrategy.Both;
+
+    /// <summary>
+    /// Defines the strategy used when emitting warnings for unmapped enum members.
+    /// By default this is <see cref="RequiredMappingStrategy.Both"/>, inheriting the strategy from <see cref="RequiredMappingStrategy"/>.
+    /// </summary>
+    public RequiredMappingStrategy RequiredEnumMappingStrategy { get; set; } = RequiredMappingStrategy.Both;
+
+    /// <summary>
+    /// Determines the access level of members that Mapperly will map.
+    /// </summary>
+    public MemberVisibility IncludedMembers { get; set; } = MemberVisibility.AllAccessible;
+
+    /// <summary>
+    /// Determines the access level of constructors that Mapperly will take into account.
+    /// </summary>
+    public MemberVisibility IncludedConstructors { get; set; } = MemberVisibility.AllAccessible;
+
+    /// <summary>
+    /// Controls the priority of constructors used in mapping.
+    /// When <c>true</c>, a parameterless constructor is prioritized over constructors with parameters.
+    /// When <c>false</c>, accessible constructors are ordered in descending order by their parameter count.
+    /// </summary>
+    public bool PreferParameterlessConstructors { get; set; } = true;
+
+    /// <summary>
+    /// Whether to automatically discover user mapping methods based on their signature.
+    /// Partial methods are always considered mapping methods.
+    /// If <c>true</c>, all partial methods and methods with an implementation body and a mapping method signature are discovered as mapping methods.
+    /// If <c>false</c> only partial methods and methods with a <see cref="UserMappingAttribute"/> are discovered.
+    ///
+    /// To discover mappings in external mappers (<seealso cref="UseMapperAttribute"/> and <seealso cref="UseStaticMapperAttribute"/>)
+    /// the same rules are applied:
+    /// If set to <c>true</c> all methods with a mapping method signature are automatically discovered.
+    /// If set to <c>false</c> methods with a <see cref="UserMappingAttribute"/> and if the containing class has a <see cref="MapperAttribute"/>
+    /// partial methods are discovered.
+    /// </summary>
+    public bool AutoUserMappings { get; set; } = true;
 }

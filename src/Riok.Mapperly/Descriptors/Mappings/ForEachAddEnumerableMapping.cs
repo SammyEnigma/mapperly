@@ -1,51 +1,41 @@
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Riok.Mapperly.Descriptors.ObjectFactories;
-using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
-using static Riok.Mapperly.Emit.SyntaxFactoryHelper;
+using Riok.Mapperly.Descriptors.Constructors;
+using Riok.Mapperly.Descriptors.Enumerables;
+using Riok.Mapperly.Descriptors.Enumerables.Capacity;
+using Riok.Mapperly.Descriptors.Mappings.ExistingTarget;
 
 namespace Riok.Mapperly.Descriptors.Mappings;
 
 /// <summary>
-/// Represents a foreach enumerable mapping which works by looping through the source,
-/// mapping each element and adding it to the target collection.
+/// Represents a foreach enumerable mapping which works by creating a new target instance,
+/// looping through the source, mapping each element and adding it to the target collection.
 /// </summary>
-public class ForEachAddEnumerableMapping : MethodMapping
+public class ForEachAddEnumerableMapping : NewInstanceObjectMemberMethodMapping, INewInstanceEnumerableMapping
 {
-    private const string TargetVariableName = "target";
-    private const string LoopItemVariableName = "item";
-    private const string AddMethodName = "Add";
-
-    private readonly ITypeMapping _elementMapping;
-    private readonly ObjectFactory? _objectFactory;
+    private readonly ForEachAddEnumerableExistingTargetMapping _existingTargetMapping;
 
     public ForEachAddEnumerableMapping(
-        ITypeSymbol sourceType,
-        ITypeSymbol targetType,
-        ITypeMapping elementMapping,
-        ObjectFactory? objectFactory)
-        : base(sourceType, targetType)
+        IInstanceConstructor? constructor,
+        CollectionInfos collectionInfos,
+        INewInstanceMapping elementMapping,
+        bool enableReferenceHandling,
+        string insertMethodName
+    )
+        : base(collectionInfos.Source.Type, collectionInfos.Target.Type, enableReferenceHandling)
     {
-        _elementMapping = elementMapping;
-        _objectFactory = objectFactory;
+        _existingTargetMapping = new(collectionInfos, elementMapping, insertMethodName);
+        if (constructor != null)
+        {
+            Constructor = constructor;
+        }
     }
 
-    public override IEnumerable<StatementSyntax> BuildBody(TypeMappingBuildContext ctx)
+    public CollectionInfos CollectionInfos => _existingTargetMapping.CollectionInfos;
+
+    public void AddCapacitySetter(ICapacitySetter capacitySetter) => _existingTargetMapping.AddCapacitySetter(capacitySetter);
+
+    protected override IEnumerable<StatementSyntax> BuildBody(TypeMappingBuildContext ctx, ExpressionSyntax target)
     {
-        var targetVariableName = ctx.NameBuilder.New(TargetVariableName);
-        var loopItemVariableName = ctx.NameBuilder.New(LoopItemVariableName);
-
-        yield return _objectFactory == null
-            ? CreateInstance(targetVariableName, TargetType)
-            : DeclareLocalVariable(targetVariableName, _objectFactory.CreateType(SourceType, TargetType, ctx.Source));
-
-        var convertedSourceItemExpression = _elementMapping.Build(ctx.WithSource(loopItemVariableName));
-        var addMethod = MemberAccess(targetVariableName, AddMethodName);
-        yield return ForEachStatement(
-            VarIdentifier,
-            Identifier(loopItemVariableName),
-            ctx.Source,
-            Block(ExpressionStatement(Invocation(addMethod, convertedSourceItemExpression))));
-        yield return ReturnVariable(targetVariableName);
+        return base.BuildBody(ctx, target).Concat(_existingTargetMapping.Build(ctx, target));
     }
 }

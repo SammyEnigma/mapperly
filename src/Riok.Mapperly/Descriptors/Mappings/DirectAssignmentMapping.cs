@@ -7,14 +7,9 @@ namespace Riok.Mapperly.Descriptors.Mappings;
 /// Represents a direct assignment mapping.
 /// Source and target types need to be the same types.
 /// </summary>
-public class DirectAssignmentMapping : TypeMapping
+public class DirectAssignmentMapping(ITypeSymbol type) : NewInstanceMapping(type, type)
 {
-    public DirectAssignmentMapping(ITypeSymbol type) : base(type, type)
-    {
-    }
-
-    public override ExpressionSyntax Build(TypeMappingBuildContext ctx)
-        => ctx.Source;
+    public override ExpressionSyntax Build(TypeMappingBuildContext ctx) => ctx.Source;
 
     public override bool IsSynthetic => true;
 }

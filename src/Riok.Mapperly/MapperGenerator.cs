@@ -1,85 +1,129 @@
 ﻿using System.Collections.Immutable;
-using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
+using Microsoft.CodeAnalysis.CSharp;
 using Riok.Mapperly.Abstractions;
+using Riok.Mapperly.Configuration;
 using Riok.Mapperly.Descriptors;
+using Riok.Mapperly.Diagnostics;
 using Riok.Mapperly.Emit;
 using Riok.Mapperly.Helpers;
+using Riok.Mapperly.Output;
+using Riok.Mapperly.Symbols;
 
 namespace Riok.Mapperly;
 
 [Generator]
 public class MapperGenerator : IIncrementalGenerator
 {
-    private const string GeneratedFileSuffix = ".g.cs";
-    private static readonly string _mapperAttributeName = typeof(MapperAttribute).FullName;
+    public static readonly string MapperAttributeName = typeof(MapperAttribute).FullName!;
+    public static readonly string MapperDefaultsAttributeName = typeof(MapperDefaultsAttribute).FullName!;
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var mapperClassDeclarations = context.SyntaxProvider
-            .CreateSyntaxProvider(
-                static (s, _) => IsSyntaxTargetForGeneration(s),
-                static (ctx, _) => GetSemanticTargetForGeneration(ctx))
-            .WhereNotNull();
-
-        var compilationAndMappers = context.CompilationProvider.Combine(mapperClassDeclarations.Collect());
-        context.RegisterSourceOutput(compilationAndMappers, static (spc, source) => Execute(source.Left, source.Right, spc));
-    }
-
-    private static bool IsSyntaxTargetForGeneration(SyntaxNode node)
-        => node is ClassDeclarationSyntax { AttributeLists.Count: > 0 };
-
-    private static ClassDeclarationSyntax? GetSemanticTargetForGeneration(GeneratorSyntaxContext ctx)
-    {
-        var classDeclaration = (ClassDeclarationSyntax)ctx.Node;
-        foreach (var attributeListSyntax in classDeclaration.AttributeLists)
-        {
-            foreach (var attributeSyntax in attributeListSyntax.Attributes)
-            {
-                if (ctx.SemanticModel.GetSymbolInfo(attributeSyntax).Symbol is not IMethodSymbol attributeSymbol)
-                    continue;
-
-                var attributeContainingTypeSymbol = attributeSymbol.ContainingType;
-                var fullName = attributeContainingTypeSymbol.ToDisplayString();
-                if (fullName == _mapperAttributeName)
-                    return classDeclaration;
-            }
-        }
-
-        return null;
-    }
-
-    private static void Execute(Compilation compilation, ImmutableArray<ClassDeclarationSyntax> mappers, SourceProductionContext ctx)
-    {
-        if (mappers.IsDefaultOrEmpty)
-            return;
-
 #if DEBUG_SOURCE_GENERATOR
         DebuggerUtil.AttachDebugger();
 #endif
+        // report compilation diagnostics
+        var compilationDiagnostics = context.CompilationProvider.SelectMany(
+            static (compilation, _) => BuildCompilationDiagnostics(compilation)
+        );
+        context.ReportDiagnostics(compilationDiagnostics);
 
-        var mapperAttributeSymbol = compilation.GetTypeByMetadataName(_mapperAttributeName);
+        var nestedCompilations = SyntaxProvider.GetNestedCompilations(context);
+
+        // build the compilation context
+        var compilationContext = context
+            .CompilationProvider.Combine(nestedCompilations)
+            .Select(
+                static (c, _) =>
+                    new CompilationContext(c.Left, new WellKnownTypes(c.Left), c.Right.ToImmutableArray(), new FileNameBuilder())
+            )
+            .WithTrackingName(MapperGeneratorStepNames.BuildCompilationContext);
+
+        // build the assembly default configurations
+        var mapperDefaultsAssembly = SyntaxProvider.GetMapperDefaultDeclarations(context);
+        var mapperDefaults = compilationContext
+            .Combine(mapperDefaultsAssembly)
+            .Select(static (x, _) => BuildDefaults(x.Left, x.Right))
+            .WithTrackingName(MapperGeneratorStepNames.BuildMapperDefaults);
+
+        // extract the mapper declarations and build the descriptors
+        var mappersAndDiagnostics = SyntaxProvider
+            .GetMapperDeclarations(context)
+            .Combine(compilationContext)
+            .Combine(mapperDefaults)
+            .Select(static (x, ct) => BuildDescriptor(x.Left.Right, x.Left.Left, x.Right, ct))
+            .WhereNotNull();
+
+        // output the diagnostics
+        var diagnostics = mappersAndDiagnostics
+            .Select(static (x, _) => x.Diagnostics)
+            .WithTrackingName(MapperGeneratorStepNames.ReportDiagnostics);
+        context.ReportDiagnostics(diagnostics);
+
+        // output the mappers
+        var mappers = mappersAndDiagnostics.Select(static (x, _) => x.Mapper).WithTrackingName(MapperGeneratorStepNames.BuildMappers);
+        context.EmitMapperSource(mappers);
+    }
+
+    private static MapperAndDiagnostics? BuildDescriptor(
+        CompilationContext compilationContext,
+        MapperDeclaration mapperDeclaration,
+        MapperConfiguration mapperDefaults,
+        CancellationToken cancellationToken
+    )
+    {
+        var mapperAttributeSymbol = compilationContext.Types.TryGet(MapperAttributeName);
         if (mapperAttributeSymbol == null)
-            return;
+            return null;
 
-        var uniqueNameBuilder = new UniqueNameBuilder();
-        foreach (var mapperSyntax in mappers.Distinct())
+        var symbolAccessor = new SymbolAccessor(compilationContext, mapperDeclaration.Symbol);
+        if (!symbolAccessor.HasAttribute<MapperAttribute>(mapperDeclaration.Symbol))
+            return null;
+
+        try
         {
-            var mapperModel = compilation.GetSemanticModel(mapperSyntax.SyntaxTree);
-            if (mapperModel.GetDeclaredSymbol(mapperSyntax) is not INamedTypeSymbol mapperSymbol)
-                continue;
+            var builder = new DescriptorBuilder(compilationContext, mapperDeclaration, symbolAccessor, mapperDefaults);
+            var (descriptor, diagnostics) = builder.Build(cancellationToken);
+            var mapper = new MapperNode(
+                compilationContext.FileNameBuilder.Build(descriptor),
+                SourceEmitter.Build(descriptor, cancellationToken)
+            );
+            return new MapperAndDiagnostics(mapper, diagnostics.ToImmutableEquatableArray());
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+    }
 
-            if (!mapperSymbol.HasAttribute(mapperAttributeSymbol))
-                continue;
+    private static MapperConfiguration BuildDefaults(CompilationContext compilationContext, IAssemblySymbol? assemblySymbol)
+    {
+        if (assemblySymbol == null)
+            return MapperConfiguration.Default;
 
-            var builder = new DescriptorBuilder(ctx, compilation, mapperSyntax, mapperSymbol);
-            var descriptor = builder.Build();
+        var mapperDefaultsAttribute = compilationContext.Types.TryGet(MapperDefaultsAttributeName);
+        if (mapperDefaultsAttribute == null)
+            return MapperConfiguration.Default;
 
-            ctx.AddSource(
-                uniqueNameBuilder.New(mapperSymbol.Name) + GeneratedFileSuffix,
-                SourceText.From(SourceEmitter.Build(descriptor).ToFullString(), Encoding.UTF8));
+        var assemblyMapperDefaultsAttribute = SymbolAccessor
+            .GetAttributesSkipCache(assemblySymbol, mapperDefaultsAttribute)
+            .FirstOrDefault();
+        return assemblyMapperDefaultsAttribute == null
+            ? MapperConfiguration.Default
+            : AttributeDataAccessor.Access<MapperDefaultsAttribute, MapperConfiguration>(assemblyMapperDefaultsAttribute);
+    }
+
+    private static IEnumerable<Diagnostic> BuildCompilationDiagnostics(Compilation compilation)
+    {
+        if (compilation is CSharpCompilation { LanguageVersion: < LanguageVersion.CSharp9 } cSharpCompilation)
+        {
+            yield return Diagnostic.Create(
+                DiagnosticDescriptors.LanguageVersionNotSupported,
+                null,
+                cSharpCompilation.LanguageVersion.ToDisplayString(),
+                LanguageVersion.CSharp9.ToDisplayString()
+            );
         }
     }
 }

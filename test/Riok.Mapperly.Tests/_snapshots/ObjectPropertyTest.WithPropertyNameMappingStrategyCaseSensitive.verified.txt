@@ -1,28 +1,44 @@
 ﻿{
   Diagnostics: [
     {
-      Id: RMG012,
-      Title: Mapping source property not found,
-      Severity: Info,
+      Location: /*
+{
+    private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,36),
+      Message: The member StringValue on the mapping source type A is not mapped to any member on the mapping target type B,
+      Severity: Warning,
       WarningLevel: 1,
-      Location: : (11,4)-(11,28),
-      Description: ,
-      HelpLink: ,
-      MessageFormat: Property {0} on source type {1} was not found,
-      Message: Property stringvalue on source type A was not found,
-      Category: Mapper
+      Descriptor: {
+        Id: RMG020,
+        Title: Source member is not mapped to any target member,
+        MessageFormat: The member {0} on the mapping source type {1} is not mapped to any member on the mapping target type {2},
+        Category: Mapper,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
     },
     {
-      Id: RMG020,
-      Title: Source property is not mapped to any target property,
-      Severity: Info,
+      Location: /*
+{
+    private partial B Map(A source);
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+}
+*/
+ : (11,4)-(11,36),
+      Message: The member stringvalue on the mapping target type B was not found on the mapping source type A,
+      Severity: Warning,
       WarningLevel: 1,
-      Location: : (11,4)-(11,28),
-      Description: ,
-      HelpLink: ,
-      MessageFormat: The property {0} on the mapping source type {1} is not mapped to any property on the mapping target type {2},
-      Message: The property StringValue on the mapping source type A is not mapped to any property on the mapping target type B,
-      Category: Mapper
+      Descriptor: {
+        Id: RMG012,
+        Title: Source member was not found for target member,
+        MessageFormat: The member {0} on the mapping target type {1} was not found on the mapping source type {2},
+        Category: Mapper,
+        DefaultSeverity: Warning,
+        IsEnabledByDefault: true
+      }
     }
   ]
 }
